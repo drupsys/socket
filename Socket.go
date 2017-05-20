@@ -56,19 +56,19 @@ func Connections(ws *websocket.Conn) {
 		
 		switch json.Type {
 		case "IPingMessage":
-			if err := sock.ping(input.ToPingMessage(&msg)); err != nil {
+			if err := sock.ping(id, input.ToPingMessage(&msg)); err != nil {
 				log.Printf("Unble to respond with Ping message, failed with: %v", err)
 			}
 		case "IJoinChannelMessage":
-			if err := sock.join(input.ToJoinChannelMessage(&msg)); err != nil {
+			if err := sock.join(id, input.ToJoinChannelMessage(&msg)); err != nil {
 				log.Printf("Unble to respond with JoinChannel message, failed with: %v", err)
 			}
 		case "IChannelMessage":
-			if err := sock.sendToChannel(input.ToChannelMessage(&msg)); err != nil {
+			if err := sock.sendToChannel(id, input.ToChannelMessage(&msg)); err != nil {
 				log.Printf("Unble to respond with Channel message, failed with: %v", err)
 			}
 		case "ISentMessage":
-			if err := sock.sendToConnection(input.ToSendMessage(&msg)); err != nil {
+			if err := sock.sendToConnection(id, input.ToSendMessage(&msg)); err != nil {
 				log.Printf("Unble to respond with Send message, failed with: %v", err)
 			}
 		}
@@ -146,9 +146,9 @@ func (s *WebSocket) disconnect(id string) {
 }
 
 // ping sends a ping response to the client
-func (s *WebSocket) ping(msg input.PingMessage) error {
+func (s *WebSocket) ping(id string, msg input.PingMessage) error {
 	var out = output.PingMessage{Type:"OPingMessage", Start:msg.Start}
-	if ws := s.connections["all"][msg.Id]; ws != nil {
+	if ws := s.connections["all"][id]; ws != nil {
 		if err := websocket.Message.Send(ws, out.ToJson()); err != nil {
 			return err
 		}
@@ -160,18 +160,18 @@ func (s *WebSocket) ping(msg input.PingMessage) error {
 }
 
 // join adds connection to the specified channel
-func (s *WebSocket) join(msg input.JoinChannelMessage) error {
+func (s *WebSocket) join(id string, msg input.JoinChannelMessage) error {
 	var err error
 	if s.channels[msg.Channel] == nil {
 		err = errors.New("User tried to join non-existing channel")
-	} else if s.connections["all"][msg.Id] == nil {
+	} else if s.connections["all"][id] == nil {
 		err = errors.New("Invalid user tried to join a channel")
 	} else {
-		s.connections[msg.Channel][msg.Id] = s.connections["all"][msg.Id]
+		s.connections[msg.Channel][id] = s.connections["all"][id]
 	}
 	
 	var out = output.JoinChannelMessage{Type:"OJoinChannelMessage", Status:err == nil}
-	if ws := s.connections["all"][msg.Id]; ws != nil {
+	if ws := s.connections["all"][id]; ws != nil {
 		if err := websocket.Message.Send(ws, out.ToJson()); err != nil {
 			return err
 		}
@@ -184,15 +184,15 @@ func (s *WebSocket) join(msg input.JoinChannelMessage) error {
 
 // sendToChannel receives data from a client, passes it to the channel's callback and send back
 // the result of the callback to all client of the channel (except sender)
-func (s *WebSocket) sendToChannel(msg input.ChannelMessage) error {
+func (s *WebSocket) sendToChannel(id string, msg input.ChannelMessage) error {
 	if s.channels[msg.Channel] == nil {
 		return errors.New("User sent data to non-existing channel")
 	}
 	
 	var err error
-	var out = output.ChannelMessage{Type:"OChannelMessage", Data: s.channels[msg.Channel](msg.Id, msg.Data)}
-	for id, ws := range s.connections[msg.Channel] {
-		if id == msg.Id {
+	var out = output.ChannelMessage{Type:"OChannelMessage", Data: s.channels[msg.Channel](id, msg.Data)}
+	for tmpId, ws := range s.connections[msg.Channel] {
+		if tmpId == id {
 			continue
 		}
 		
@@ -206,13 +206,13 @@ func (s *WebSocket) sendToChannel(msg input.ChannelMessage) error {
 
 // sendToChannel receives data from a client, passes it to the context's callback and send back
 // the result of the callback to the sender
-func (s *WebSocket) sendToConnection(msg input.SendMessage) error {
-	if s.connections["all"][msg.Id] == nil {
+func (s *WebSocket) sendToConnection(id string, msg input.SendMessage) error {
+	if s.connections["all"][id] == nil {
 		return errors.New("Invalid user tried to send data")
 	}
 	
-	var out = output.SendMessage{Type:"OChannelMessage", Data: s.channels["all"](msg.Id, msg.Data)}
-	if err := websocket.Message.Send(s.connections["all"][msg.Id], out.ToJson()); err != nil {
+	var out = output.SendMessage{Type:"OChannelMessage", Data: s.channels["all"](id, msg.Data)}
+	if err := websocket.Message.Send(s.connections["all"][id], out.ToJson()); err != nil {
 		return err
 	}
 	

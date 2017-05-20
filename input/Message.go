@@ -18,7 +18,6 @@ func ToMessage(raw *string) Message {
 
 // PingMessage describes input ping data object
 type PingMessage struct {
-	Id string `json:"id"`
 	Start int `json:"start"`
 }
 
@@ -31,7 +30,6 @@ func ToPingMessage(raw *string) PingMessage {
 
 // JoinChannelMessage describes input join channel data object
 type JoinChannelMessage struct {
-	Id string `json:"id"`
 	Channel string `json:"channel"`
 }
 
@@ -44,7 +42,6 @@ func ToJoinChannelMessage(raw *string) JoinChannelMessage {
 
 // ChannelMessage describes input channel data object
 type ChannelMessage struct {
-	Id string `json:"id"`
 	Channel string `json:"channel"`
 	Data string `json:"data"`
 }
@@ -58,7 +55,6 @@ func ToChannelMessage(raw *string) ChannelMessage {
 
 // SendMessage describes input send data object
 type SendMessage struct {
-	Id string `json:"id"`
 	Data string `json:"data"`
 }
 
