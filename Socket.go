@@ -5,79 +5,216 @@ import (
 	"log"
 	"github.com/thedarkphoton/socket/input"
 	"github.com/thedarkphoton/socket/output"
+	"crypto/rand"
+	"encoding/base64"
+	"errors"
 )
 
-// Channel defines all different types of channels
-type Channel int
+var sock *WebSocket
 
-const (
-	// ALL channel
-	ALL Channel = iota
-)
+// randomBytes generates random bytes
+func randomBytes(n int) ([]byte, error) {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return nil, err
+	}
 
-var sock *Socket
+	return b, nil
+}
+
+// randomBase64 generates random base 64 string
+func randomBase64(n int) (string, error) {
+	b, err := randomBytes(n)
+	return base64.URLEncoding.EncodeToString(b), err
+}
+
+// defaultContextCallback defines default callback for the SendMessage action
+//noinspection ALL
+func defaultContextCallback(id, data string) string {
+	return "Context callback not implemented"
+}
 
 // Connections maintains websocket connections alive
 func Connections(ws *websocket.Conn) {
-	id := string(len(sock.channels))
-	id = "10"
-	// log.Println("test" + id)
-	sock.connect(id, ws)
-	sock.connected(id)
-
+	id, err := sock.connect(ws)
+	if err != nil {
+		log.Printf("Connection could not be established, failed with: %v", err)
+		return
+	} else {
+		log.Println("Connected user with id: " + id)
+	}
+	
 	for {
 		var msg string
 		if err := websocket.Message.Receive(ws, &msg); err != nil {
-			log.Println("Unable to receive")
+			log.Printf("Unable to receive, failed with: %v", err)
+			sock.disconnect(id)
+			return
 		}
 
 		json := input.ToMessage(&msg)
+		
 		switch json.Type {
 		case "IPingMessage":
-			sock.ping(input.ToPingMessage(&msg))
+			if err := sock.ping(input.ToPingMessage(&msg)); err != nil {
+				log.Printf("Unble to respond with Ping message, failed with: %v", err)
+			}
+		case "IJoinChannelMessage":
+			if err := sock.join(input.ToJoinChannelMessage(&msg)); err != nil {
+				log.Printf("Unble to respond with JoinChannel message, failed with: %v", err)
+			}
+		case "IChannelMessage":
+			if err := sock.sendToChannel(input.ToChannelMessage(&msg)); err != nil {
+				log.Printf("Unble to respond with Channel message, failed with: %v", err)
+			}
+		case "ISentMessage":
+			if err := sock.sendToConnection(input.ToSendMessage(&msg)); err != nil {
+				log.Printf("Unble to respond with Send message, failed with: %v", err)
+			}
 		}
 	}
 }
 
-// Socket represents all connections to the socket
-type Socket struct {
-	channels map[Channel](map[string]*websocket.Conn)
-}
-
 // Instance gets instance of a socket
-func Instance() *Socket {
-	sock = &Socket{channels: make(map[Channel](map[string]*websocket.Conn))}
-	sock.channels[ALL] = make(map[string]*websocket.Conn)
+func Instance() *WebSocket {
+	sock = &WebSocket{
+		connections: make(map[string]Connection),
+		channels:    make(map[string]Channel)}
+	sock.connections["all"] = make(Connection)
+	sock.channels["all"] = defaultContextCallback
 	return sock
 }
 
-// Connect processes connection messages
-func (s *Socket) connect(id string, ws *websocket.Conn) {
-	s.channels[ALL][id] = ws
+// Channel describes the callback function of the channel
+type Channel (func(id, inJson string) string)
+
+// Connection describes the connection type
+type Connection (map[string]*websocket.Conn)
+
+// WebSocket describes data of all web socket's connections
+type WebSocket struct {
+	connections map[string]Connection
+	channels    map[string]Channel
 }
 
-func (s *Socket) connected(id string) {
+// SetContextChannel sets the callback for the SendMessage action
+func (s *WebSocket) SetContextChannel(callback Channel) {
+	sock.channels["all"] = callback
+}
+
+// AddChannel creates a channel and associates callback function for the ChannelMessage action to it
+func (s *WebSocket) AddChannel(channel string, callback Channel) {
+	if channel == "all" {
+		return
+	}
+	
+	sock.connections[channel] = make(Connection)
+	sock.channels[channel] = callback
+}
+
+// RemoveChannel removes channel and its associated function
+func (s *WebSocket) RemoveChannel(channel string) {
+	sock.connections[channel] = nil
+	sock.channels[channel] = nil
+}
+
+// connect creates a client id and send it back to the client
+func (s *WebSocket) connect(ws *websocket.Conn) (string, error) {
+	var id string
+	for loop := true; loop; loop = s.connections["all"][id] != nil {
+		if tmp, err := randomBase64(16); err != nil {
+			return "", err
+		} else {
+			id = tmp
+		}
+	}
+	
+	s.connections["all"][id] = ws
 	var out = output.ConnectedMessage{Type:"OConnectedMessage", Id: id}
-	log.Println(out.ToJson())
-	if err := websocket.Message.Send(s.channels[ALL][id], out.ToJson()); err != nil {
-		log.Println("Unable to send")
+	if err := websocket.Message.Send(s.connections["all"][id], out.ToJson()); err != nil {
+		return "", err
+	}
+	
+	return id, nil
+}
+
+// disconnect removes all client's data
+func (s *WebSocket) disconnect(id string) {
+	for channel := range s.connections {
+		s.connections[channel][id] = nil
 	}
 }
 
-func (s *Socket) ping(msg input.PingMessage) {
+// ping sends a ping response to the client
+func (s *WebSocket) ping(msg input.PingMessage) error {
 	var out = output.PingMessage{Type:"OPingMessage", Start:msg.Start}
-	log.Println(msg)
-	if err := websocket.Message.Send(s.channels[ALL][msg.Id], out.ToJson()); err != nil {
-		log.Println("Unable to send")
+	if ws := s.connections["all"][msg.Id]; ws != nil {
+		if err := websocket.Message.Send(ws, out.ToJson()); err != nil {
+			return err
+		}
+	} else {
+		return errors.New("Web socket with the specified id was not found")
 	}
+	
+	return nil
 }
 
-// JoinChannel adds connection to the specified channel
-func (s *Socket) joinChannel(name Channel, id string, ws *websocket.Conn) {
-	s.channels[name][id] = ws
+// join adds connection to the specified channel
+func (s *WebSocket) join(msg input.JoinChannelMessage) error {
+	var err error
+	if s.channels[msg.Channel] == nil {
+		err = errors.New("User tried to join non-existing channel")
+	} else if s.connections["all"][msg.Id] == nil {
+		err = errors.New("Invalid user tried to join a channel")
+	} else {
+		s.connections[msg.Channel][msg.Id] = s.connections["all"][msg.Id]
+	}
+	
+	var out = output.JoinChannelMessage{Type:"OJoinChannelMessage", Status:err == nil}
+	if ws := s.connections["all"][msg.Id]; ws != nil {
+		if err := websocket.Message.Send(ws, out.ToJson()); err != nil {
+			return err
+		}
+	} else {
+		return errors.New("Web socket with the specified id was not found")
+	}
+	
+	return err
 }
 
-// ConnectionsInChannel gets all connections in the specified channel
-func (s Socket) ConnectionsInChannel(name Channel) []Connection {
-	return toConnections(s.channels[name])
+// sendToChannel receives data from a client, passes it to the channel's callback and send back
+// the result of the callback to all client of the channel (except sender)
+func (s *WebSocket) sendToChannel(msg input.ChannelMessage) error {
+	if s.channels[msg.Channel] == nil {
+		return errors.New("User sent data to non-existing channel")
+	}
+	
+	var err error
+	var out = output.ChannelMessage{Type:"OChannelMessage", Data: s.channels[msg.Channel](msg.Id, msg.Data)}
+	for id, ws := range s.connections[msg.Channel] {
+		if id == msg.Id {
+			continue
+		}
+		
+		if tmpErr := websocket.Message.Send(ws, out.ToJson()); err != nil {
+			err = tmpErr
+		}
+	}
+	
+	return err
+}
+
+// sendToChannel receives data from a client, passes it to the context's callback and send back
+// the result of the callback to the sender
+func (s *WebSocket) sendToConnection(msg input.SendMessage) error {
+	if s.connections["all"][msg.Id] == nil {
+		return errors.New("Invalid user tried to send data")
+	}
+	
+	var out = output.SendMessage{Type:"OChannelMessage", Data: s.channels["all"](msg.Id, msg.Data)}
+	if err := websocket.Message.Send(s.connections["all"][msg.Id], out.ToJson()); err != nil {
+		return err
+	}
+	
+	return nil
 }
