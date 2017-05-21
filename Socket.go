@@ -10,6 +10,7 @@ import (
 	"errors"
 )
 
+// sock static instance of a web socket
 var sock *WebSocket
 
 // randomBytes generates random bytes
