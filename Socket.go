@@ -37,7 +37,6 @@ func Connections(ws *websocket.Conn) {
 		return
 	} else {
 		log.Println("Connected user with id: " + id)
-		log.Println("test")
 	}
 	
 	for {
