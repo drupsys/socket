@@ -95,7 +95,7 @@ type WebSocket struct {
 	channels    map[string]Channel
 }
 
-// SetContextChannel sets the callback for the SendMessage action
+// SetContextChannel sets the callback for the CallbackMessage action
 func (s *WebSocket) SetContextChannel(callback Channel) {
 	sock.channels["all"] = callback
 }
@@ -204,12 +204,12 @@ func (s *WebSocket) sendToChannel(id string, msg input.ChannelMessage) error {
 
 // sendToChannel receives data from a client, passes it to the context's callback and send back
 // the result of the callback to the sender
-func (s *WebSocket) sendToConnection(id string, msg input.SendMessage) error {
+func (s *WebSocket) sendToConnection(id string, msg input.LoopbackMessage) error {
 	if s.connections["all"][id] == nil {
 		return errors.New("Invalid user tried to send data")
 	}
 	
-	var out = output.SendMessage{Type:"LoopbackMessage", Data: s.channels["all"](id, msg.Data)}
+	var out = output.CallbackMessage{Type: "LoopbackMessage", Data: s.channels["all"](id, msg.Data)}
 	if err := websocket.Message.Send(s.connections["all"][id], out.ToJson()); err != nil {
 		return err
 	}
