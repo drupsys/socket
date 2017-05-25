@@ -37,6 +37,7 @@ func Connections(ws *websocket.Conn) {
 		return
 	} else {
 		log.Println("Connected user with id: " + id)
+		log.Println("test")
 	}
 	
 	for {
@@ -48,7 +49,6 @@ func Connections(ws *websocket.Conn) {
 		}
 
 		json := input.ToMessage(&msg)
-		
 		switch json.Type {
 		case "PingMessage":
 			if err := sock.ping(id, input.ToPingMessage(&msg)); err != nil {
@@ -95,7 +95,7 @@ type WebSocket struct {
 	channels    map[string]Channel
 }
 
-// SetContextChannel sets the callback for the CallbackMessage action
+// SetContextChannel sets the callback for the LoopbackMessage action
 func (s *WebSocket) SetContextChannel(callback Channel) {
 	sock.channels["all"] = callback
 }
@@ -209,7 +209,7 @@ func (s *WebSocket) sendToConnection(id string, msg input.LoopbackMessage) error
 		return errors.New("Invalid user tried to send data")
 	}
 	
-	var out = output.CallbackMessage{Type: "LoopbackMessage", Data: s.channels["all"](id, msg.Data)}
+	var out = output.LoopbackMessage{Type: "LoopbackMessage", Data: s.channels["all"](id, msg.Data)}
 	if err := websocket.Message.Send(s.connections["all"][id], out.ToJson()); err != nil {
 		return err
 	}
