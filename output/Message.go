@@ -26,10 +26,11 @@ func (m *ConnectedMessage) ToJson() string {
 	return string(msg)
 }
 
-// JoinChannelMessage describes output ping data object
+// JoinChannelMessage describes output join channel data object
 type JoinChannelMessage struct {
-	Type string `json:"type"`
-	Status bool `json:"status"`
+	Type    string `json:"type"`
+	Channel string `json:"channel"`
+	Joined  bool `json:"joined"`
 }
 
 // ToJson converts join channel message object to json string
@@ -41,6 +42,7 @@ func (m *JoinChannelMessage) ToJson() string {
 // ChannelMessage describes output ping data object
 type ChannelMessage struct {
 	Type string `json:"type"`
+	Channel string `json:"channel"`
 	Data string `json:"data"`
 }
 
