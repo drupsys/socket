@@ -37,7 +37,6 @@ func Connections(ws *websocket.Conn) {
 		return
 	} else {
 		log.Println("Connected user with id: " + id)
-		log.Println("test")
 	}
 	
 	for {
@@ -183,14 +182,14 @@ func (s *WebSocket) join(id string, msg input.JoinChannelMessage) error {
 // sendToChannel receives data from a client, passes it to the channel's callback and send back
 // the result of the callback to all client of the channel (except sender)
 func (s *WebSocket) sendToChannel(id string, msg input.ChannelMessage) error {
-	if s.channels[msg.Channel] == nil {
+	if _, ok := s.channels[msg.Channel]; !ok {
 		return errors.New("User sent data to non-existing channel")
 	}
 	
 	var err error
 	var out = output.ChannelMessage{Type:"ChannelMessage", Channel: msg.Channel, Data: s.channels[msg.Channel](id, msg.Data)}
-	for tmpId, ws := range s.connections[msg.Channel] {
-		if tmpId == id {
+	for _, ws := range s.connections[msg.Channel] {
+		if ws == nil {
 			continue
 		}
 		
