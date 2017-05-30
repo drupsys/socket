@@ -58,8 +58,10 @@ func Connections(ws *websocket.Conn) {
 				log.Printf("Unble to respond with JoinChannel message, failed with: %v", err)
 			}
 		case "ChannelMessage":
-			if err := sock.sendToChannel(id, input.ToChannelMessage(&msg)); err != nil {
-				log.Printf("Unble to respond with Channel message, failed with: %v", err)
+			if errs := sock.sendToChannel(id, input.ToChannelMessage(&msg)); errs != nil {
+				for _, err := range errs {
+					log.Printf("Unble to respond with Channel message, failed with: %v", err)
+				}
 			}
 		case "LoopbackMessage":
 			if err := sock.sendToConnection(id, input.ToSendMessage(&msg)); err != nil {
@@ -113,6 +115,25 @@ func (s *WebSocket) AddChannel(channel string, callback Channel) {
 func (s *WebSocket) RemoveChannel(channel string) {
 	sock.connections[channel] = nil
 	sock.channels[channel] = nil
+}
+
+// SendToConnections receives data from a client, passes it to the context's callback and send back
+// the result of the callback to the sender
+func (s *WebSocket) SendToConnections(ids []string, msg input.LoopbackMessage) []error {
+	errs := make([]error, 0)
+	
+	for _, id := range ids {
+		if s.connections["all"][id] == nil {
+			errs = append(errs, errors.New("Invalid user tried to send data"))
+		}
+		
+		var out = output.LoopbackMessage{Type: "LoopbackMessage", Data: s.channels["all"](id, msg.Data)}
+		if err := websocket.Message.Send(s.connections["all"][id], out.ToJson()); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	
+	return errs
 }
 
 // connect creates a client id and send it back to the client
@@ -181,27 +202,29 @@ func (s *WebSocket) join(id string, msg input.JoinChannelMessage) error {
 
 // sendToChannel receives data from a client, passes it to the channel's callback and send back
 // the result of the callback to all client of the channel (except sender)
-func (s *WebSocket) sendToChannel(id string, msg input.ChannelMessage) error {
+func (s *WebSocket) sendToChannel(id string, msg input.ChannelMessage) []error {
+	errs := make([]error, 0)
+	
 	if _, ok := s.channels[msg.Channel]; !ok {
-		return errors.New("User sent data to non-existing channel")
+		errs = append(errs, errors.New("User sent data to non-existing channel"))
+		return errs
 	}
 	
-	var err error
 	var out = output.ChannelMessage{Type:"ChannelMessage", Channel: msg.Channel, Data: s.channels[msg.Channel](id, msg.Data)}
 	for _, ws := range s.connections[msg.Channel] {
 		if ws == nil {
 			continue
 		}
 		
-		if tmpErr := websocket.Message.Send(ws, out.ToJson()); err != nil {
-			err = tmpErr
+		if err := websocket.Message.Send(ws, out.ToJson()); err != nil {
+			errs = append(errs, err)
 		}
 	}
 	
-	return err
+	return errs
 }
 
-// sendToChannel receives data from a client, passes it to the context's callback and send back
+// sendToConnection receives data from a client, passes it to the context's callback and send back
 // the result of the callback to the sender
 func (s *WebSocket) sendToConnection(id string, msg input.LoopbackMessage) error {
 	if s.connections["all"][id] == nil {
