@@ -4,7 +4,7 @@ import "encoding/json"
 
 // LoopbackMessage describes output ping data object
 type LoopbackMessage struct {
-	Type string `json:"type"`
+	Type Type `json:"type"`
 	Data string `json:"data"`
 }
 

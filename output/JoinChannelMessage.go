@@ -4,7 +4,7 @@ import "encoding/json"
 
 // JoinChannelMessage describes output join channel data object
 type JoinChannelMessage struct {
-	Type    string `json:"type"`
+	Type    Type `json:"type"`
 	Channel string `json:"channel"`
 	Joined  bool `json:"joined"`
 }
