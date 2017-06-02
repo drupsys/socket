@@ -4,7 +4,7 @@ import "encoding/json"
 
 // ConnectedMessage describes output ping data object
 type ConnectedMessage struct {
-	Type string `json:"type"`
+	Type Type `json:"type"`
 	Id string `json:"id"`
 }
 

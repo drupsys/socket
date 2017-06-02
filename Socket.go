@@ -49,21 +49,21 @@ func Connections(ws *websocket.Conn) {
 
 		json := input.ToMessage(&msg)
 		switch json.Type {
-		case "PingMessage":
+		case input.PING:
 			if err := sock.ping(id, input.ToPingMessage(&msg)); err != nil {
 				log.Printf("Unble to respond with Ping message, failed with: %v", err)
 			}
-		case "JoinChannelMessage":
+		case input.JOIN_CHANNEL:
 			if err := sock.join(id, input.ToJoinChannelMessage(&msg)); err != nil {
 				log.Printf("Unble to respond with JoinChannel message, failed with: %v", err)
 			}
-		case "ChannelMessage":
+		case input.CHANNEL:
 			if errs := sock.sendToChannel(id, input.ToChannelMessage(&msg)); errs != nil {
 				for _, err := range errs {
 					log.Printf("Unble to respond with Channel message, failed with: %v", err)
 				}
 			}
-		case "LoopbackMessage":
+		case input.LOOPBACK:
 			if err := sock.sendToConnection(id, input.ToSendMessage(&msg)); err != nil {
 				log.Printf("Unble to respond with Send message, failed with: %v", err)
 			}
@@ -127,7 +127,7 @@ func (s *WebSocket) SendToConnections(ids []string, msg input.LoopbackMessage) [
 			errs = append(errs, errors.New("Invalid user tried to send data"))
 		}
 		
-		var out = output.LoopbackMessage{Type: "LoopbackMessage", Data: s.channels["all"](id, msg.Data)}
+		var out = output.LoopbackMessage{Type: output.LOOPBACK, Data: s.channels["all"](id, msg.Data)}
 		if err := websocket.Message.Send(s.connections["all"][id], out.ToJson()); err != nil {
 			errs = append(errs, err)
 		}
@@ -148,7 +148,7 @@ func (s *WebSocket) connect(ws *websocket.Conn) (string, error) {
 	}
 	
 	s.connections["all"][id] = ws
-	var out = output.ConnectedMessage{Type:"ConnectedMessage", Id: id}
+	var out = output.ConnectedMessage{Type:output.CONNECTED, Id: id}
 	if err := websocket.Message.Send(s.connections["all"][id], out.ToJson()); err != nil {
 		return "", err
 	}
@@ -165,7 +165,7 @@ func (s *WebSocket) disconnect(id string) {
 
 // ping sends a ping response to the client
 func (s *WebSocket) ping(id string, msg input.PingMessage) error {
-	var out = output.PingMessage{Type:"PingMessage", Start:msg.Start}
+	var out = output.PingMessage{Type:output.PING, Start:msg.Start}
 	if ws := s.connections["all"][id]; ws != nil {
 		if err := websocket.Message.Send(ws, out.ToJson()); err != nil {
 			return err
@@ -188,7 +188,7 @@ func (s *WebSocket) join(id string, msg input.JoinChannelMessage) error {
 		s.connections[msg.Channel][id] = s.connections["all"][id]
 	}
 	
-	var out = output.JoinChannelMessage{Type: "JoinChannelMessage", Joined: err == nil}
+	var out = output.JoinChannelMessage{Type: output.JOIN_CHANNEL, Joined: err == nil}
 	if ws := s.connections["all"][id]; ws != nil {
 		if err := websocket.Message.Send(ws, out.ToJson()); err != nil {
 			return err
@@ -210,7 +210,7 @@ func (s *WebSocket) sendToChannel(id string, msg input.ChannelMessage) []error {
 		return errs
 	}
 	
-	var out = output.ChannelMessage{Type:"ChannelMessage", Channel: msg.Channel, Data: s.channels[msg.Channel](id, msg.Data)}
+	var out = output.ChannelMessage{Type:output.CHANNEL, Channel: msg.Channel, Data: s.channels[msg.Channel](id, msg.Data)}
 	for _, ws := range s.connections[msg.Channel] {
 		if ws == nil {
 			continue
@@ -231,7 +231,7 @@ func (s *WebSocket) sendToConnection(id string, msg input.LoopbackMessage) error
 		return errors.New("Invalid user tried to send data")
 	}
 	
-	var out = output.LoopbackMessage{Type: "LoopbackMessage", Data: s.channels["all"](id, msg.Data)}
+	var out = output.LoopbackMessage{Type: output.LOOPBACK, Data: s.channels["all"](id, msg.Data)}
 	if err := websocket.Message.Send(s.connections["all"][id], out.ToJson()); err != nil {
 		return err
 	}

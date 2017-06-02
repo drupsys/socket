@@ -4,7 +4,7 @@ import "encoding/json"
 
 // ChannelMessage describes output ping data object
 type ChannelMessage struct {
-	Type string `json:"type"`
+	Type Type `json:"type"`
 	Channel string `json:"channel"`
 	Data string `json:"data"`
 }

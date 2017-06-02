@@ -4,7 +4,7 @@ import "encoding/json"
 
 // PingMessage describes output ping data object
 type PingMessage struct {
-	Type string `json:"type"`
+	Type Type `json:"type"`
 	Start int `json:"start"`
 }
 
