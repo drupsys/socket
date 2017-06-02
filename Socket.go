@@ -188,7 +188,7 @@ func (s *WebSocket) join(id string, msg input.JoinChannelMessage) error {
 		s.connections[msg.Channel][id] = s.connections["all"][id]
 	}
 	
-	var out = output.JoinChannelMessage{Type: output.JOIN_CHANNEL, Joined: err == nil}
+	var out = output.JoinChannelMessage{Type: output.JOIN_CHANNEL, Channel: msg.Channel, Joined: err == nil}
 	if ws := s.connections["all"][id]; ws != nil {
 		if err := websocket.Message.Send(ws, out.ToJson()); err != nil {
 			return err
